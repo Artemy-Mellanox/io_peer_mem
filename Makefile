@@ -11,6 +11,7 @@ else
  KERNEL_SOURCES	 = /lib/modules/$(KERNEL_UNAME)/build
 endif
 
+export KBUILD_EXTRA_SYMBOLS=${MOFED_PATH}/Module.symvers
 
 build: modules
 .PHONY: build
@@ -18,6 +19,9 @@ build: modules
 install: modules_install
 .PHONY: install
 
-
 %::
 	$(MAKE) -C $(KERNEL_SOURCES) M=$$PWD $@
+
+insmod: build
+	-sudo rmmod io_peer_mem
+	sudo insmod $$PWD/io_peer_mem.ko

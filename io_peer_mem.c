@@ -103,6 +103,7 @@ struct context {
 	struct vm_area_struct *vma;
 };
 
+#if 0
 static void fault_missing_pages(struct vm_area_struct *vma, unsigned long start,
 				unsigned long end)
 {
@@ -118,9 +119,11 @@ static void fault_missing_pages(struct vm_area_struct *vma, unsigned long start,
 		handle_mm_fault(current->mm, vma, start, FAULT_FLAG_WRITE);
 	}
 }
+#endif
 
 static int is_uverbs_file(struct vm_area_struct *vma)
 {
+#if 0	
 	/* There is an ugly corner case leak possible:
 	 *   If a malicous userspace process grabs the uverbs file descriptor
 	 *   (for /dev/infinband/uverbs*), mmaps it, and tries to register
@@ -147,6 +150,9 @@ static int is_uverbs_file(struct vm_area_struct *vma)
 		return 0;
 
 	return strncmp(i->i_cdev->kobj.name, "uverbs", strlen("uverbs")) == 0;
+#else
+	return 0;
+#endif
 }
 
 
@@ -181,7 +187,7 @@ static int acquire(unsigned long addr, size_t size, void *peer_mem_private_data,
 	if (!(vma->vm_flags & VM_WRITE))
 		goto err;
 
-	fault_missing_pages(vma, addr & PAGE_MASK, end);
+	//fault_missing_pages(vma, addr & PAGE_MASK, end);
 
 	if (follow_pfn(vma, addr, &pfn))
 		goto err;
@@ -219,8 +225,7 @@ static void release(void *context)
 }
 
 static int get_pages(unsigned long addr, size_t size, int write, int force,
-		     struct sg_table *sg_head, void *context,
-		     u64 core_context)
+		     struct sg_table *sg_head, void *context, u64 core_context)
 {
 	struct context *ctx = (struct context *) context;
 
@@ -248,9 +253,9 @@ static int dma_map(struct sg_table *sg_head, void *context,
 	unsigned long size = ctx->size;
 	int i, ret;
 
-	*nmap = ctx->size / PAGE_SIZE;
+	*nmap = (ctx->size + PAGE_SIZE-1) / PAGE_SIZE;
 
-	for_each_sg(sg_head->sgl, sg,  (ctx->size + PAGE_SIZE-1) / PAGE_SIZE, i) {
+	for_each_sg(sg_head->sgl, sg, (ctx->size + PAGE_SIZE-1) / PAGE_SIZE, i) {
 		sg_set_page(sg, NULL, PAGE_SIZE, 0);
 
 		if ((ret = follow_pfn(ctx->vma, addr, &pfn)))
@@ -272,6 +277,8 @@ static int dma_map(struct sg_table *sg_head, void *context,
 			break;
 		}
 	}
+
+	printk("dma_map nmap %d\n", *nmap);
 
 	return 0;
 }
@@ -301,9 +308,11 @@ static struct peer_memory_client io_mem_client = {
 
 
 static void *reg_handle;
+static invalidate_peer_memory invalidate_callback;
+
 static int __init io_mem_init(void)
 {
-	reg_handle = ib_register_peer_memory_client(&io_mem_client, NULL);
+	reg_handle = ib_register_peer_memory_client(&io_mem_client, &invalidate_callback);
 
 	if (!reg_handle)
 		return -EINVAL;
